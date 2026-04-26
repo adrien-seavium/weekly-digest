@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weekly Digest</title>
+<style>
+  body { margin: 0; padding: 0; background: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; color: #1a1a1a; }
+  .wrapper { max-width: 680px; margin: 32px auto; padding: 0 16px; }
+  .header { background: #111827; border-radius: 12px 12px 0 0; padding: 28px 32px; }
+  .header h1 { margin: 0 0 4px; font-size: 22px; font-weight: 600; color: #fff; }
+  .header p { margin: 0; font-size: 13px; color: #9ca3af; }
+  .body { background: #fff; padding: 28px 32px; border-radius: 0 0 12px 12px; border: 1px solid #e5e7eb; border-top: none; }
+  .section { margin-bottom: 36px; }
+  .section:last-child { margin-bottom: 0; }
+  .section-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #6b7280; margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid #f3f4f6; }
+  .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 16px; margin-bottom: 8px; }
+  .card:last-child { margin-bottom: 0; }
+  .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .company { font-size: 15px; font-weight: 600; color: #111827; }
+  .badge { font-size: 11px; font-weight: 500; border-radius: 4px; padding: 2px 8px; }
+  .badge-hot { background: #fef3c7; color: #92400e; }
+  .badge-warm { background: #dbeafe; color: #1e40af; }
+  .badge-cold { background: #f3f4f6; color: #6b7280; }
+  .badge-high { background: #fee2e2; color: #991b1b; }
+  .badge-medium { background: #fef3c7; color: #92400e; }
+  .badge-low { background: #f3f4f6; color: #6b7280; }
+  .badge-gap { background: #fce7f3; color: #9d174d; }
+  .meta { font-size: 12px; color: #6b7280; margin-bottom: 4px; }
+  .topic { font-size: 13px; color: #374151; line-height: 1.5; }
+  .action { font-size: 12px; color: #059669; margin-top: 6px; font-weight: 500; }
+  .action::before { content: "→ "; }
+  .domain { font-size: 11px; color: #9ca3af; font-family: monospace; }
+  .empty { color: #9ca3af; font-size: 13px; font-style: italic; padding: 8px 0; }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 28px; }
+  .stat { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 16px; flex: 1; min-width: 100px; text-align: center; }
+  .stat-number { font-size: 24px; font-weight: 700; color: #111827; line-height: 1; }
+  .stat-label { font-size: 11px; color: #6b7280; margin-top: 4px; }
+  .footer { text-align: center; font-size: 11px; color: #9ca3af; margin-top: 20px; padding-bottom: 32px; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="header">
+    <h1>📬 {{ team_name }} — Weekly Digest</h1>
+    <p>Week ending {{ week_label }} &nbsp;·&nbsp; Generated automatically</p>
+  </div>
+  <div class="body">
+
+    <!-- Stats bar -->
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-number">{{ replied_to_us|length }}</div>
+        <div class="stat-label">Replied to us</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">{{ no_reply|length }}</div>
+        <div class="stat-label">No reply</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">{{ we_didnt_reply|length }}</div>
+        <div class="stat-label">To reply</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">{{ active_projects|length }}</div>
+        <div class="stat-label">Projects</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">{{ crm_gaps|length }}</div>
+        <div class="stat-label">CRM gaps</div>
+      </div>
+    </div>
+
+    <!-- 1. Replied to us -->
+    {% if sections.replied_to_us %}
+    <div class="section">
+      <div class="section-title">✅ They replied — keep the momentum</div>
+      {% if replied_to_us %}
+        {% for c in replied_to_us %}
+        <div class="card">
+          <div class="card-header">
+            <span class="company">{{ c.company_name }}</span>
+            <span class="badge badge-{{ c.heat }}">{{ heat_emoji[c.heat] }} {{ c.heat|capitalize }}</span>
+          </div>
+          <div class="meta">{{ c.domain }} &nbsp;·&nbsp; {{ c.last_reply_date }}</div>
+          <div class="topic">{{ c.topic }}</div>
+          {% if c.next_action %}<div class="action">{{ c.next_action }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty">No external replies this week.</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- 2. No reply -->
+    {% if sections.no_reply %}
+    <div class="section">
+      <div class="section-title">📭 We're waiting — push &amp; follow up</div>
+      {% if no_reply %}
+        {% for c in no_reply %}
+        <div class="card">
+          <div class="card-header">
+            <span class="company">{{ c.company_name }}</span>
+            <span class="badge badge-medium">{{ c.days_waiting }}d waiting</span>
+          </div>
+          <div class="meta">{{ c.domain }} &nbsp;·&nbsp; Last contact: {{ c.last_contact_date }}</div>
+          <div class="topic">{{ c.topic }}</div>
+          {% if c.suggested_followup %}<div class="action">{{ c.suggested_followup }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty">Everyone has replied — great week!</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- 3. We didn't reply -->
+    {% if sections.we_didnt_reply %}
+    <div class="section">
+      <div class="section-title">🚨 They're waiting for us — priority</div>
+      {% if we_didnt_reply %}
+        {% for c in we_didnt_reply %}
+        <div class="card">
+          <div class="card-header">
+            <span class="company">{{ c.company_name }}</span>
+            <span class="badge badge-{{ c.urgency }}">{{ urgency_emoji[c.urgency] }} {{ c.urgency|capitalize }}</span>
+          </div>
+          <div class="meta">{{ c.domain }} &nbsp;·&nbsp; Inbound: {{ c.last_inbound_date }}</div>
+          <div class="topic">{{ c.topic }}</div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty">Inbox zero — all inbounds answered.</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- 4. Active projects -->
+    {% if sections.active_projects %}
+    <div class="section">
+      <div class="section-title">📁 Active projects &amp; deals</div>
+      {% if active_projects %}
+        {% for p in active_projects %}
+        <div class="card">
+          <div class="card-header">
+            <span class="company">{{ p.company_name }}</span>
+            <span class="badge badge-warm">{{ p.project_type }}</span>
+          </div>
+          <div class="meta">{{ p.domain }} &nbsp;·&nbsp; Stage: <strong>{{ p.current_stage }}</strong></div>
+          <div class="topic">{{ p.key_info }}</div>
+          {% if p.next_step %}<div class="action">{{ p.next_step }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty">No active projects detected this week.</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- 5. SaaS discussions -->
+    {% if sections.saas_discussions %}
+    <div class="section">
+      <div class="section-title">💻 SaaS &amp; platform discussions</div>
+      {% if saas_discussions %}
+        {% for s in saas_discussions %}
+        <div class="card">
+          <div class="card-header">
+            <span class="company">{{ s.company_name }}</span>
+            <span class="badge badge-warm">{{ s.discussion_type }}</span>
+          </div>
+          <div class="meta">{{ s.domain }} &nbsp;·&nbsp; {{ s.status }}</div>
+          {% if s.next_action %}<div class="action">{{ s.next_action }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty">No SaaS discussions this week.</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- 6. CRM gaps -->
+    {% if sections.crm_gaps %}
+    <div class="section">
+      <div class="section-title">⚠️ CRM gaps — add to Notion before next week</div>
+      {% if crm_gaps %}
+        {% for g in crm_gaps %}
+        <div class="card">
+          <div class="card-header">
+            <span class="company">{{ g.company_name }}</span>
+            <span class="badge badge-gap">Missing from CRM</span>
+          </div>
+          <div class="meta domain">{{ g.domain }}</div>
+          {% if g.contacts %}
+          <div class="topic">{{ g.contacts|join(', ') }}</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty">All companies are in Notion. ✓</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+  </div>
+  <div class="footer">
+    Generated by <strong>weekly-digest</strong> &nbsp;·&nbsp; <a href="https://github.com/your-org/weekly-digest" style="color:#6b7280">github.com/your-org/weekly-digest</a>
+  </div>
+</div>
+</body>
+</html>

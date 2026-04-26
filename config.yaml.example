@@ -1,0 +1,77 @@
+# weekly-digest — config.yaml.example
+# Copy this file to config.yaml and fill in your values.
+# All secrets (API keys, tokens) must go into GitHub Secrets, not here.
+# This file only holds non-sensitive behavioural configuration.
+
+digest:
+  # Name shown in email subject and header
+  team_name: "Acme Sales Team"
+
+  # Digest language: "en" or "fr"
+  language: "en"
+
+  # How many days back to fetch emails (7 = full week Mon→Sun)
+  lookback_days: 7
+
+  # Minimum thread length to be considered "active" (ignore 1-line auto-replies)
+  min_thread_messages: 1
+
+gmail:
+  # Gmail address used to send the digest (must match OAuth credentials)
+  # Set the actual value in GitHub Secret: GMAIL_SENDER_ADDRESS
+  sender_name: "Weekly Digest Bot"
+
+  # Labels/folders to EXCLUDE from analysis (e.g. newsletters, spam folders)
+  exclude_labels:
+    - "SPAM"
+    - "TRASH"
+    - "CATEGORY_PROMOTIONS"
+    - "CATEGORY_UPDATES"
+
+  # Email domains to IGNORE (internal team emails, your own domain, etc.)
+  # Add your own company domain so internal emails are filtered out
+  exclude_domains:
+    - "yourdomain.com"
+
+openai:
+  model: "gpt-4o"
+  # Max tokens for the classification prompt per batch
+  max_tokens: 4096
+  # Number of email threads per API call (batching for cost efficiency)
+  batch_size: 20
+
+notion:
+  # How to match email domains to Notion Company records
+  # "domain" = match by email domain, "name" = fuzzy match by company name
+  match_strategy: "domain"
+
+  # Property names in your Notion databases — adapt to your schema
+  companies_db:
+    name_property: "Name"
+    domain_property: "Domain"
+    status_property: "Status"
+
+  contacts_db:
+    name_property: "Name"
+    email_property: "Email"
+    company_relation_property: "Company"
+
+  opportunities_db:
+    name_property: "Name"
+    stage_property: "Stage"
+    company_relation_property: "Company"
+    type_property: "Type"  # e.g. "SaaS" / "Project" / "Chartering"
+
+  digest_archive_db:
+    name_property: "Name"
+    week_property: "Week"
+    content_property: "Content"
+
+digest_sections:
+  # Toggle each section on/off
+  replied_to_us: true          # Companies that replied this week
+  no_reply: true               # Companies we contacted but got no reply
+  we_didnt_reply: true         # Companies that wrote to us and we haven't replied yet
+  active_projects: true        # Deals / projects extracted from email threads
+  saas_discussions: true       # SaaS subscription / platform discussions
+  crm_gaps: true               # Companies in emails but missing from Notion CRM
