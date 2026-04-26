@@ -111,11 +111,11 @@ class NotionSync:
         results = []
         cursor = None
         while True:
-            kwargs: dict = {"database_id": self.companies_db}
-            if cursor:
-                kwargs["start_cursor"] = cursor
             try:
-                response = self.client.databases.query(**kwargs)
+                response = self.client.databases.query(
+                    database_id=self.companies_db,
+                    **({} if not cursor else {"start_cursor": cursor})
+                )
             except Exception as e:
                 log.error("Failed to query Notion Companies DB: %s", e)
                 break
