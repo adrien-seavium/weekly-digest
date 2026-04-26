@@ -88,12 +88,12 @@ def main():
     )
 
     # ── Step 4: Archive digest to Notion ─────────────────────────────────────
-    archive_db = os.environ.get("NOTION_DIGEST_ARCHIVE_DB_ID")
-    if archive_db and config["digest_sections"].get("crm_gaps"):
+    archive_db = True  # always create weekly note
+    if archive_db:
         log.info("Step 4/5 — Archiving digest to Notion…")
-        notion.archive_digest(enriched, run_date, team_name)
+        notion.create_weekly_note(enriched, run_date, team_name)
     else:
-        log.info("Step 4/5 — Notion archive skipped (NOTION_DIGEST_ARCHIVE_DB_ID not set).")
+        log.info("Step 4/5 — Skipped.")
 
     # ── Step 5: Send email digest ─────────────────────────────────────────────
     log.info("Step 5/5 — Sending email digest…")

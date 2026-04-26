@@ -1,18 +1,18 @@
 """
-notion_sync.py
-Cross-checks analysed companies against Notion CRM databases.
-Detects CRM gaps (companies in emails but missing from Notion).
-Archives each weekly digest as a Notion page.
+notion_sync.py — cross-check CRM and create weekly follow-up note.
+Compatible with notion-client v3.
+Matches companies by email domain against Notion Contacts DB email field.
 """
 
 import os
-import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 from notion_client import Client
 
 log = logging.getLogger(__name__)
+
+WEEKLY_DEBRIEF_PAGE_ID = "34ee7ec88d9280efa636cfb44c41b8a9"
 
 
 class NotionSync:
@@ -22,153 +22,161 @@ class NotionSync:
         self.companies_db = os.environ["NOTION_COMPANIES_DB_ID"]
         self.contacts_db = os.environ["NOTION_CONTACTS_DB_ID"]
         self.opportunities_db = os.environ["NOTION_OPPORTUNITIES_DB_ID"]
-        self.archive_db = os.environ.get("NOTION_DIGEST_ARCHIVE_DB_ID", "")
-        self.cfg = config["notion"]
-
-    # ── Public ────────────────────────────────────────────────────────────────
+        self.cfg = self.config["notion"]
 
     def enrich(self, analysis: dict) -> dict:
-        """
-        Cross-check each company from the email analysis against Notion.
-        Adds 'crm_gaps' list and 'notion_status' to each company entry.
-        """
-        notion_companies = self._fetch_all_companies()
-        notion_domains = {
-            self._extract_domain(c.get("domain", "")): c
-            for c in notion_companies
-            if c.get("domain")
-        }
-        notion_names = {c["name"].lower(): c for c in notion_companies if c.get("name")}
+        """Cross-check emails against Notion Contacts DB (match by email domain)."""
+        notion_domains = self._fetch_contact_domains()
 
         crm_gaps = []
         for company in analysis.get("all_companies", []):
             domain = company.get("domain", "")
             name = company.get("company_name", "")
-            match = notion_domains.get(domain) or notion_names.get(name.lower())
-            if match:
-                company["notion_status"] = match.get("status", "In CRM")
+            if self._norm(domain) in notion_domains:
                 company["in_crm"] = True
+                company["notion_status"] = "In CRM"
             else:
-                company["notion_status"] = "Missing"
                 company["in_crm"] = False
-                crm_gaps.append(
-                    {
-                        "company_name": name,
-                        "domain": domain,
-                        "contacts": company.get("contacts", []),
-                        "why_flagged": "Appeared in email threads — not found in Notion Companies DB",
-                    }
-                )
+                company["notion_status"] = "Missing"
+                crm_gaps.append({
+                    "company_name": name,
+                    "domain": domain,
+                    "contacts": company.get("contacts", []),
+                })
 
         analysis["crm_gaps"] = crm_gaps
-        log.info(
-            "CRM cross-check: %d in CRM, %d gaps detected.",
-            len(analysis["all_companies"]) - len(crm_gaps),
-            len(crm_gaps),
-        )
+        log.info("CRM check: %d in CRM, %d gaps.", len(analysis["all_companies"]) - len(crm_gaps), len(crm_gaps))
         return analysis
 
-    def archive_digest(self, analysis: dict, run_date: datetime, team_name: str):
-        """Push a summary page to the Notion digest archive database."""
-        if not self.archive_db:
-            log.warning("NOTION_DIGEST_ARCHIVE_DB_ID not set — skipping archive.")
-            return
+    def create_weekly_note(self, analysis: dict, run_date: datetime, team_name: str):
+        """Create a weekly follow-up checklist page under Weekly Debrief."""
+        week_label = run_date.strftime("Week %d %b %Y")
+        content = self._build_checklist(analysis)
 
-        week_label = run_date.strftime("Week of %b %d, %Y")
-        summary = self._build_summary_text(analysis)
-
-        cfg = self.cfg["digest_archive_db"]
         try:
             self.client.pages.create(
-                parent={"database_id": self.archive_db},
+                parent={"page_id": WEEKLY_DEBRIEF_PAGE_ID},
                 properties={
-                    cfg["name_property"]: {
-                        "title": [{"text": {"content": f"{team_name} — {week_label}"}}]
-                    },
-                    cfg["week_property"]: {
-                        "rich_text": [{"text": {"content": week_label}}]
-                    },
+                    "title": {"title": [{"text": {"content": f"🗓 {week_label} — Follow-up"}}]}
                 },
-                children=[
-                    {
-                        "object": "block",
-                        "type": "paragraph",
-                        "paragraph": {
-                            "rich_text": [{"type": "text", "text": {"content": summary}}]
-                        },
-                    }
-                ],
+                children=content,
             )
-            log.info("Digest archived to Notion — %s", week_label)
+            log.info("Weekly Notion note created — %s", week_label)
         except Exception as e:
-            log.error("Failed to archive digest to Notion: %s", e)
+            log.error("Failed to create weekly Notion note: %s", e)
 
     # ── Private ───────────────────────────────────────────────────────────────
 
-    def _fetch_all_companies(self) -> list[dict]:
-        """Fetch all company records from Notion (handles pagination)."""
-        cfg = self.cfg["companies_db"]
-        results = []
+    def _fetch_contact_domains(self) -> set:
+        """Fetch all email domains from the Contacts DB."""
+        cfg = self.cfg["contacts_db"]
+        email_prop = cfg.get("email_property", "Email Address")
+        domains = set()
         cursor = None
         while True:
             try:
-                response = self.client.databases.query(
-                    database_id=self.companies_db,
-                    **({} if not cursor else {"start_cursor": cursor})
-                )
+                kwargs = {"database_id": self.contacts_db}
+                if cursor:
+                    kwargs["start_cursor"] = cursor
+                response = self.client.databases.query(**kwargs)
             except Exception as e:
-                log.error("Failed to query Notion Companies DB: %s", e)
+                log.error("Failed to query Notion Contacts DB: %s", e)
                 break
-
             for page in response.get("results", []):
                 props = page.get("properties", {})
-                name = self._extract_text(props.get(cfg["name_property"]))
-                domain = self._extract_text(props.get(cfg.get("domain_property", "Domain")))
-                status = self._extract_select(props.get(cfg.get("status_property", "Status")))
-                results.append({"name": name, "domain": domain, "status": status})
-
+                email = self._text(props.get(email_prop))
+                if "@" in email:
+                    domain = email.split("@")[-1].lower().strip()
+                    domains.add(self._norm(domain))
             if not response.get("has_more"):
                 break
             cursor = response.get("next_cursor")
+        log.info("Fetched %d contact domains from Notion.", len(domains))
+        return domains
 
-        log.debug("Fetched %d companies from Notion.", len(results))
-        return results
+    def _build_checklist(self, analysis: dict) -> list:
+        """Build Notion block content for the weekly follow-up checklist."""
+        blocks = []
+
+        def heading(text):
+            return {
+                "object": "block", "type": "heading_2",
+                "heading_2": {"rich_text": [{"type": "text", "text": {"content": text}}]}
+            }
+
+        def todo(text, checked=False):
+            return {
+                "object": "block", "type": "to_do",
+                "to_do": {
+                    "rich_text": [{"type": "text", "text": {"content": text}}],
+                    "checked": checked
+                }
+            }
+
+        def divider():
+            return {"object": "block", "type": "divider", "divider": {}}
+
+        # They replied — follow up
+        replied = analysis.get("replied_to_us", [])
+        if replied:
+            blocks.append(heading("✅ They replied — keep the momentum"))
+            for c in replied:
+                action = c.get("next_action", "Follow up")
+                blocks.append(todo(f"{c['company_name']} — {action}"))
+            blocks.append(divider())
+
+        # We didn't reply — priority
+        to_reply = analysis.get("we_didnt_reply", [])
+        if to_reply:
+            blocks.append(heading("🚨 They're waiting — reply first"))
+            for c in sorted(to_reply, key=lambda x: x.get("urgency", "low"), reverse=True):
+                blocks.append(todo(f"{c['company_name']} — {c.get('topic', '')}"))
+            blocks.append(divider())
+
+        # No reply — push
+        no_reply = analysis.get("no_reply", [])
+        if no_reply:
+            blocks.append(heading("📭 No reply — push & follow up"))
+            for c in no_reply:
+                sender = c.get("last_sender_name", "")
+                sender_str = f" (last sent by {sender})" if sender else ""
+                blocks.append(todo(f"{c['company_name']}{sender_str} — {c.get('suggested_followup', 'Follow up')}"))
+            blocks.append(divider())
+
+        # Active projects
+        projects = analysis.get("active_projects", [])
+        if projects:
+            blocks.append(heading("📁 Active projects — check status"))
+            for p in projects:
+                blocks.append(todo(f"{p['company_name']} [{p.get('current_stage', '')}] — {p.get('next_step', '')}"))
+            blocks.append(divider())
+
+        # CRM gaps
+        gaps = analysis.get("crm_gaps", [])
+        if gaps:
+            blocks.append(heading("⚠️ Add to Notion CRM"))
+            for g in gaps:
+                blocks.append(todo(f"{g['company_name']} ({g.get('domain', '')})"))
+
+        return blocks
 
     @staticmethod
-    def _extract_text(prop: dict | None) -> str:
+    def _text(prop: dict | None) -> str:
         if not prop:
             return ""
-        prop_type = prop.get("type", "")
-        if prop_type == "title":
+        t = prop.get("type", "")
+        if t == "title":
             items = prop.get("title", [])
-        elif prop_type == "rich_text":
+        elif t == "rich_text":
             items = prop.get("rich_text", [])
-        elif prop_type == "url":
+        elif t == "email":
+            return prop.get("email", "") or ""
+        elif t == "url":
             return prop.get("url", "") or ""
         else:
             return ""
         return "".join(i.get("plain_text", "") for i in items).strip()
 
     @staticmethod
-    def _extract_select(prop: dict | None) -> str:
-        if not prop:
-            return ""
-        sel = prop.get("select") or {}
-        return sel.get("name", "")
-
-    @staticmethod
-    def _extract_domain(value: str) -> str:
-        """Normalize domain: strip www., lowercase."""
+    def _norm(value: str) -> str:
         return value.lower().replace("www.", "").strip("/").strip()
-
-    @staticmethod
-    def _build_summary_text(analysis: dict) -> str:
-        lines = [
-            f"Replied to us: {len(analysis.get('replied_to_us', []))} companies",
-            f"No reply: {len(analysis.get('no_reply', []))} companies",
-            f"We didn't reply: {len(analysis.get('we_didnt_reply', []))} companies",
-            f"Active projects: {len(analysis.get('active_projects', []))}",
-            f"SaaS discussions: {len(analysis.get('saas_discussions', []))}",
-            f"CRM gaps: {len(analysis.get('crm_gaps', []))} companies to add",
-        ]
-        return "\n".join(lines)

@@ -29,6 +29,7 @@ STRICTLY EXCLUDE — do not include in any section:
 - Personal emails (car purchases, hotel bookings, Uber receipts, Airbnb, Renault, Sixt, etc.)
 - Internal Seavium team emails (seavium.com domain)
 - Automated notifications (LinkedIn job alerts, Google Alerts, Notion notifications, Vercel, OVH, etc.)
+- Venture capital firms, accelerators, or investors reaching out for deal flow (General Catalyst, Sequoia, etc.) UNLESS the discussion is about a concrete investment in Seavium
 - Newsletter subscriptions, marketing emails, invoices from SaaS tools unrelated to maritime
 - Financial services unrelated to maritime operations (Qonto, Revolut banking emails, etc.)
 - Weather APIs or tech tools that are purely operational/infrastructure (not a partnership discussion)
@@ -110,8 +111,8 @@ Schema:
 }
 
 Classification rules:
-- "replied_to_us": last message in the thread was sent by an EXTERNAL contact
-- "no_reply": we (Seavium) sent the last message and received no reply; thread is at least 2 days old
+- "replied_to_us": the last message in the thread was sent by an EXTERNAL contact — meaning THEY replied to us, and now WE need to follow up
+- "no_reply": WE (Seavium) sent the last message and have NOT received a reply yet — we are waiting for THEM
 - "we_didnt_reply": external contact sent the last message and we have not replied within 24h
 - "active_projects": concrete project, deal, vessel charter, or collaboration being discussed
 - "saas_discussions": threads specifically about Seavium platform trials, subscriptions, demos, or integrations
