@@ -1,0 +1,52 @@
+digest:
+  team_name: "Seavium Sales"
+  language: "en"
+  lookback_days: 7
+  min_thread_messages: 1
+
+gmail:
+  sender_name: "Weekly Digest Bot"
+  exclude_labels:
+    - "SPAM"
+    - "TRASH"
+    - "CATEGORY_PROMOTIONS"
+    - "CATEGORY_UPDATES"
+  exclude_domains:
+    - "seavium.com"
+
+openai:
+  model: "gpt-4o"
+  max_tokens: 4096
+  batch_size: 20
+
+notion:
+  match_strategy: "domain"
+
+  companies_db:
+    name_property: "Name"
+    domain_property: "website"
+    status_property: "app statut"
+
+  contacts_db:
+    name_property: "Name"
+    email_property: "Email Address"
+    company_relation_property: "Company"
+
+  opportunities_db:
+    name_property: "Name"
+    stage_property: "Step"
+    company_relation_property: "Client Name"
+    type_property: "chartering"
+
+  digest_archive_db:
+    name_property: "Name"
+    week_property: "Week"
+    content_property: "Content"
+
+digest_sections:
+  replied_to_us: true
+  no_reply: true
+  we_didnt_reply: true
+  active_projects: true
+  saas_discussions: true
+  crm_gaps: true
