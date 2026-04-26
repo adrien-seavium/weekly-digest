@@ -104,7 +104,7 @@
             <span class="company">{{ c.company_name }}</span>
             <span class="badge badge-medium">{{ c.days_waiting }}d waiting</span>
           </div>
-          <div class="meta">{{ c.domain }} &nbsp;·&nbsp; Last contact: {{ c.last_contact_date }}</div>
+          <div class="meta">{{ c.domain }} &nbsp;·&nbsp; Last contact: {{ c.last_contact_date }}{% if c.last_sender_name %} &nbsp;·&nbsp; Last sent by <strong>{{ c.last_sender_name }}</strong>{% endif %}</div>
           <div class="topic">{{ c.topic }}</div>
           {% if c.suggested_followup %}<div class="action">{{ c.suggested_followup }}</div>{% endif %}
         </div>
