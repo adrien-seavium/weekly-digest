@@ -19,15 +19,11 @@ class NotionSync:
     def __init__(self, config: dict):
         self.config = config
         self.client = Client(auth=os.environ["NOTION_TOKEN"])
-        self.companies_db = os.environ["NOTION_COMPANIES_DB_ID"]
         self.contacts_db = os.environ["NOTION_CONTACTS_DB_ID"]
-        self.opportunities_db = os.environ["NOTION_OPPORTUNITIES_DB_ID"]
         self.cfg = self.config["notion"]
 
     def enrich(self, analysis: dict) -> dict:
-        """Cross-check emails against Notion Contacts DB (match by email domain)."""
         notion_domains = self._fetch_contact_domains()
-
         crm_gaps = []
         for company in analysis.get("all_companies", []):
             domain = company.get("domain", "")
@@ -38,37 +34,25 @@ class NotionSync:
             else:
                 company["in_crm"] = False
                 company["notion_status"] = "Missing"
-                crm_gaps.append({
-                    "company_name": name,
-                    "domain": domain,
-                    "contacts": company.get("contacts", []),
-                })
-
+                crm_gaps.append({"company_name": name, "domain": domain, "contacts": company.get("contacts", [])})
         analysis["crm_gaps"] = crm_gaps
         log.info("CRM check: %d in CRM, %d gaps.", len(analysis["all_companies"]) - len(crm_gaps), len(crm_gaps))
         return analysis
 
     def create_weekly_note(self, analysis: dict, run_date: datetime, team_name: str):
-        """Create a weekly follow-up checklist page under Weekly Debrief."""
         week_label = run_date.strftime("Week %d %b %Y")
         content = self._build_checklist(analysis)
-
         try:
             self.client.pages.create(
                 parent={"page_id": WEEKLY_DEBRIEF_PAGE_ID},
-                properties={
-                    "title": {"title": [{"text": {"content": f"🗓 {week_label} — Follow-up"}}]}
-                },
+                properties={"title": {"title": [{"text": {"content": f"🗓 {week_label} — Follow-up"}}]}},
                 children=content,
             )
             log.info("Weekly Notion note created — %s", week_label)
         except Exception as e:
             log.error("Failed to create weekly Notion note: %s", e)
 
-    # ── Private ───────────────────────────────────────────────────────────────
-
     def _fetch_contact_domains(self) -> set:
-        """Fetch all email domains from the Contacts DB."""
         cfg = self.cfg["contacts_db"]
         email_prop = cfg.get("email_property", "Email Address")
         domains = set()
@@ -95,66 +79,50 @@ class NotionSync:
         return domains
 
     def _build_checklist(self, analysis: dict) -> list:
-        """Build Notion block content for the weekly follow-up checklist."""
         blocks = []
 
-        def heading(text):
-            return {
-                "object": "block", "type": "heading_2",
-                "heading_2": {"rich_text": [{"type": "text", "text": {"content": text}}]}
-            }
+        def h2(text):
+            return {"object": "block", "type": "heading_2", "heading_2": {"rich_text": [{"type": "text", "text": {"content": text}}]}}
 
-        def todo(text, checked=False):
-            return {
-                "object": "block", "type": "to_do",
-                "to_do": {
-                    "rich_text": [{"type": "text", "text": {"content": text}}],
-                    "checked": checked
-                }
-            }
+        def todo(text):
+            return {"object": "block", "type": "to_do", "to_do": {"rich_text": [{"type": "text", "text": {"content": text}}], "checked": False}}
 
         def divider():
             return {"object": "block", "type": "divider", "divider": {}}
 
-        # They replied — follow up
         replied = analysis.get("replied_to_us", [])
         if replied:
-            blocks.append(heading("✅ They replied — keep the momentum"))
+            blocks.append(h2("✅ They replied — follow up"))
             for c in replied:
-                action = c.get("next_action", "Follow up")
-                blocks.append(todo(f"{c['company_name']} — {action}"))
+                blocks.append(todo(f"{c['company_name']} — {c.get('next_action', 'Follow up')}"))
             blocks.append(divider())
 
-        # We didn't reply — priority
         to_reply = analysis.get("we_didnt_reply", [])
         if to_reply:
-            blocks.append(heading("🚨 They're waiting — reply first"))
-            for c in sorted(to_reply, key=lambda x: x.get("urgency", "low"), reverse=True):
+            blocks.append(h2("🚨 They're waiting — reply first"))
+            for c in sorted(to_reply, key=lambda x: {"high": 0, "medium": 1, "low": 2}.get(x.get("urgency", "low"), 2)):
                 blocks.append(todo(f"{c['company_name']} — {c.get('topic', '')}"))
             blocks.append(divider())
 
-        # No reply — push
         no_reply = analysis.get("no_reply", [])
         if no_reply:
-            blocks.append(heading("📭 No reply — push & follow up"))
+            blocks.append(h2("📭 No reply — push & follow up"))
             for c in no_reply:
                 sender = c.get("last_sender_name", "")
-                sender_str = f" (last sent by {sender})" if sender else ""
-                blocks.append(todo(f"{c['company_name']}{sender_str} — {c.get('suggested_followup', 'Follow up')}"))
+                s = f" (last sent by {sender})" if sender else ""
+                blocks.append(todo(f"{c['company_name']}{s} — {c.get('suggested_followup', 'Follow up')}"))
             blocks.append(divider())
 
-        # Active projects
         projects = analysis.get("active_projects", [])
         if projects:
-            blocks.append(heading("📁 Active projects — check status"))
+            blocks.append(h2("📁 Active projects — check status"))
             for p in projects:
                 blocks.append(todo(f"{p['company_name']} [{p.get('current_stage', '')}] — {p.get('next_step', '')}"))
             blocks.append(divider())
 
-        # CRM gaps
         gaps = analysis.get("crm_gaps", [])
         if gaps:
-            blocks.append(heading("⚠️ Add to Notion CRM"))
+            blocks.append(h2("⚠️ Add to Notion CRM"))
             for g in gaps:
                 blocks.append(todo(f"{g['company_name']} ({g.get('domain', '')})"))
 
@@ -166,16 +134,14 @@ class NotionSync:
             return ""
         t = prop.get("type", "")
         if t == "title":
-            items = prop.get("title", [])
+            return "".join(i.get("plain_text", "") for i in prop.get("title", [])).strip()
         elif t == "rich_text":
-            items = prop.get("rich_text", [])
+            return "".join(i.get("plain_text", "") for i in prop.get("rich_text", [])).strip()
         elif t == "email":
             return prop.get("email", "") or ""
         elif t == "url":
             return prop.get("url", "") or ""
-        else:
-            return ""
-        return "".join(i.get("plain_text", "") for i in items).strip()
+        return ""
 
     @staticmethod
     def _norm(value: str) -> str:
